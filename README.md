@@ -4,13 +4,14 @@
 package main
 
 import (
-    "github.com/TheSp1der/tplink"
-    "fmt"
-    "log"
+	"fmt"
+	"log"
+
+	"github.com/TheSp1der/tplink"
 )
 
 func main() {
-	d := tplink{HostName: "light-office.tplink.example.com"}
+	d := tplink.Tplink{HostName: "light-office.tplink.example.com"}
 	r, err := d.SystemInfo()
 	if err != nil {
 		log.Fatal(err)
