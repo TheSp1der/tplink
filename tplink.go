@@ -1,4 +1,4 @@
-package main
+package tplink
 
 import (
 	"bufio"
@@ -9,18 +9,53 @@ import (
 	"net"
 )
 
-type tplink struct {
+type SysInfo struct {
+	System struct {
+		GetSysinfo struct {
+			SwVer      string `json:"sw_ver"`
+			HwVer      string `json:"hw_ver"`
+			Type       string `json:"type"`
+			Model      string `json:"model"`
+			Mac        string `json:"mac"`
+			DevName    string `json:"dev_name"`
+			Alias      string `json:"alias"`
+			RelayState int    `json:"relay_state"`
+			OnTime     int    `json:"on_time"`
+			ActiveMode string `json:"active_mode"`
+			Feature    string `json:"feature"`
+			Updating   int    `json:"updating"`
+			IconHash   string `json:"icon_hash"`
+			Rssi       int    `json:"rssi"`
+			LedOff     int    `json:"led_off"`
+			LongitudeI int    `json:"longitude_i"`
+			LatitudeI  int    `json:"latitude_i"`
+			HwID       string `json:"hwId"`
+			FwID       string `json:"fwId"`
+			DeviceID   string `json:"deviceId"`
+			OemID      string `json:"oemId"`
+			NextAction struct {
+				Type int `json:"type"`
+			} `json:"next_action"`
+			ErrCode   int     `json:"err_code"`
+			MicType   string  `json:"mic_type"`
+			Latitude  float64 `json:"latitude"`
+			Longitude float64 `json:"longitude"`
+		} `json:"get_sysinfo"`
+	} `json:"system"`
+}
+
+type Tplink struct {
 	HostName string
 }
 
-type getSysInfo struct {
+type GetSysInfo struct {
 	System struct {
 		SysInfo struct {
 		} `json:"get_sysinfo"`
 	} `json:"system"`
 }
 
-type changeState struct {
+type ChangeState struct {
 	System struct {
 		SetRelayState struct {
 			State int `json:"state"`
@@ -106,8 +141,8 @@ func payloadLength(header []byte) uint32 {
 	return payloadLength
 }
 
-func (s *tplink) SystemInfo() (results string, err error) {
-	var payload getSysInfo
+func (s *Tplink) SystemInfo() (results string, err error) {
+	var payload GetSysInfo
 
 	j, _ := json.Marshal(payload)
 
@@ -119,8 +154,8 @@ func (s *tplink) SystemInfo() (results string, err error) {
 	return
 }
 
-func (s *tplink) TurnOn() (err error) {
-	var payload changeState
+func (s *Tplink) TurnOn() (err error) {
+	var payload ChangeState
 
 	payload.System.SetRelayState.State = 1
 
@@ -130,8 +165,8 @@ func (s *tplink) TurnOn() (err error) {
 	return
 }
 
-func (s *tplink) TurnOff() (err error) {
-	var payload changeState
+func (s *Tplink) TurnOff() (err error) {
+	var payload ChangeState
 
 	payload.System.SetRelayState.State = 0
 
