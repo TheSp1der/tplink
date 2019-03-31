@@ -150,7 +150,7 @@ func (s *Tplink) SystemInfo() (SysInfo, error) {
 		return jsonResp, err
 	}
 
-	if err := json.Unmarshal([]byte(decrypt(resp)), jsonResp); err != nil {
+	if err := json.Unmarshal([]byte(decrypt(resp)), &jsonResp); err != nil {
 		return jsonResp, err
 	}
 	return jsonResp, nil
