@@ -23,31 +23,61 @@ This is a support package for interacting and obtaining information from [tp-lin
 
 ## Usage 
 
-Import this library:
+### Import library
+
+To import the library locally:
 
 ``` bash
 go get github.com/TheSp1der/tplink
 ```
 
-Get information from this device:
+To import the library in your code:
 
 ``` go
-package main
+import "github.com/TheSp1der/tplink"
+```
 
-import (
-	"fmt"
-	"log"
+### Interacting with the device
 
-	"github.com/TheSp1der/tplink"
-)
+To obtain some basic information from the device use the example code below. To return other objects please examine the SysInfo struct.
 
-func main() {
-	d := tplink.Tplink{HostName: "light-office.tplink.example.com"}
-	r, err := d.SystemInfo()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(r)
+``` go
+d := tplink.Tplink{Host: "light-office.tplink.example.com"}
+r, err := d.SystemInfo()
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("MAC: " + r.System.GetSysinfo.Mac)
+fmt.Println("Name: " + r.System.GetSysinfo.Alias)
+
+if r.System.GetSysinfo.RelayState == 1 {
+    fmt.Println("Power: On")
+} else {
+    fmt.Println("Power: Off")
+}
+```
+
+Will return data:
+
+``` generic
+MAC: 50:C7:BF:##:##:##
+Name: Office Light
+Power: On
+```
+
+To turn a device on or off:
+
+``` go
+// turn on
+d := tplink.Tplink{Host: "light-office.tplink.example.com"}
+if err := d.TurnOn(); err != nil {
+	log.Fatal(err)
+}
+
+// turn off
+d := tplink.Tplink{Host: "light-office.tplink.example.com"}
+if err := d.TurnOff(); err != nil {
+	log.Fatal(err)
 }
 ```
 
@@ -56,3 +86,16 @@ func main() {
 The tp-link company and products are trademarks™ or registered® trademarks of their respective holders. Use of them does not imply any affiliation with or endorsement by them. I claim no ownership or control of the tp-link company, products, name, logos or intellectual property.
 
 ## License
+
+BSD 2-Clause License
+
+Copyright (c) 2019, TheSp1der
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
