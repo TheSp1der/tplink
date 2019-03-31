@@ -21,7 +21,7 @@ type SysInfo struct {
 			Mac        string `json:"mac"`
 			DevName    string `json:"dev_name"`
 			Alias      string `json:"alias"`
-			RelayState int    `json:"relay_state"`
+			RelayState bool   `json:"relay_state"`
 			OnTime     int    `json:"on_time"`
 			ActiveMode string `json:"active_mode"`
 			Feature    string `json:"feature"`
