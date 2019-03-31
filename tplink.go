@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"time"
 )
 
+// SysInfo A type used to return information from tplink devices
 type SysInfo struct {
 	System struct {
 		GetSysinfo struct {
@@ -44,18 +46,19 @@ type SysInfo struct {
 	} `json:"system"`
 }
 
+// Tplink Device host indentification
 type Tplink struct {
-	HostName string
+	Host string
 }
 
-type GetSysInfo struct {
+type getSysInfo struct {
 	System struct {
 		SysInfo struct {
 		} `json:"get_sysinfo"`
 	} `json:"system"`
 }
 
-type ChangeState struct {
+type changeState struct {
 	System struct {
 		SetRelayState struct {
 			State int `json:"state"`
@@ -95,83 +98,88 @@ func decrypt(ciphertext []byte) string {
 	return string(ciphertext)
 }
 
-func send(hostname string, output []byte) (data []byte, err error) {
-	conn, err := net.Dial("tcp", hostname+":9999")
+func send(host string, dataSend []byte) ([]byte, error) {
+	var header = make([]byte, 4)
+
+	// establish connection (two second timeout)
+	conn, err := net.DialTimeout("tcp", host+":9999", time.Duration(time.Second*2))
 	if err != nil {
 		return []byte(""), err
 	}
 	defer conn.Close()
 
+	// submit data to device
 	writer := bufio.NewWriter(conn)
-	_, err = writer.Write(output)
+	_, err = writer.Write(dataSend)
 	if err != nil {
 		return []byte(""), err
 	}
 	writer.Flush()
 
-	response, err := readHeader(conn)
-	if err != nil {
-		return []byte(""), err
-	}
-
-	payload, err := readPayload(conn, payloadLength(response))
-	if err != nil {
-		return []byte(""), err
-	}
-
-	return payload, nil
-}
-
-func readHeader(conn net.Conn) ([]byte, error) {
+	// read response header to determine response size
 	headerReader := io.LimitReader(conn, int64(4))
-	var response = make([]byte, 4)
-	_, err := headerReader.Read(response)
-	return response, err
+	_, err = headerReader.Read(header)
+	if err != nil {
+		return []byte(""), err
+	}
+
+	// read response
+	respSize := int64(binary.BigEndian.Uint32(header))
+	respReader := io.LimitReader(conn, respSize)
+	var response = make([]byte, respSize)
+	_, err = respReader.Read(response)
+	if err != nil {
+		return []byte(""), err
+	}
+
+	return response, nil
 }
 
-func readPayload(conn net.Conn, length uint32) ([]byte, error) {
-	payloadReader := io.LimitReader(conn, int64(length))
-	var payload = make([]byte, length)
-	_, err := payloadReader.Read(payload)
-	return payload, err
-}
-
-func payloadLength(header []byte) uint32 {
-	payloadLength := binary.BigEndian.Uint32(header)
-	return payloadLength
-}
-
-func (s *Tplink) SystemInfo() (results string, err error) {
-	var payload GetSysInfo
+// SystemInfo Returns information from targeted device
+func (s *Tplink) SystemInfo() (SysInfo, error) {
+	var (
+		payload  getSysInfo
+		jsonResp SysInfo
+	)
 
 	j, _ := json.Marshal(payload)
 
 	data := encrypt(string(j))
-	reading, err := send(s.HostName, data)
-	if err == nil {
-		results = decrypt(reading)
+	resp, err := send(s.Host, data)
+	if err != nil {
+		return jsonResp, err
 	}
-	return
+
+	if err := json.Unmarshal([]byte(decrypt(resp)), jsonResp); err != nil {
+		return jsonResp, err
+	}
+	return jsonResp, nil
 }
 
-func (s *Tplink) TurnOn() (err error) {
-	var payload ChangeState
+// TurnOn Device state change to turn remote device on
+func (s *Tplink) TurnOn() error {
+	var payload changeState
 
 	payload.System.SetRelayState.State = 1
 
 	j, _ := json.Marshal(payload)
 	data := encrypt(string(j))
-	_, err = send(s.HostName, data)
-	return
+	if _, err := send(s.Host, data); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *Tplink) TurnOff() (err error) {
-	var payload ChangeState
+// TurnOff Device state change to turn remote device off
+func (s *Tplink) TurnOff() error {
+	var payload changeState
 
 	payload.System.SetRelayState.State = 0
 
 	j, _ := json.Marshal(payload)
 	data := encrypt(string(j))
-	_, err = send(s.HostName, data)
-	return
+	if _, err := send(s.Host, data); err != nil {
+		return err
+	}
+	return nil
 }
