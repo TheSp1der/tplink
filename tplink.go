@@ -3,11 +3,13 @@ package tplink
 import (
 	"bufio"
 	"bytes"
-	"encoding/binary"
-	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"time"
+
+	"encoding/binary"
+	"encoding/json"
 )
 
 // SysInfo A type used to return information from tplink devices
@@ -35,6 +37,17 @@ type SysInfo struct {
 			FwID       string `json:"fwId"`
 			DeviceID   string `json:"deviceId"`
 			OemID      string `json:"oemId"`
+			Children   []struct {
+				ID         string `json:"id"`
+				State      int    `json:"state"`
+				Alias      string `json:"alias"`
+				OnTime     int    `json:"on_time"`
+				NextAction struct {
+					Type int `json:"type"`
+				} `json:"next_action"`
+			} `json:"children"`
+			ChildNum   int `json:"child_num"`
+			NtcState   int `json:"ntc_state"`
 			NextAction struct {
 				Type int `json:"type"`
 			} `json:"next_action"`
@@ -46,7 +59,7 @@ type SysInfo struct {
 	} `json:"system"`
 }
 
-// Tplink Device host indentification
+// Tplink Device host identification
 type Tplink struct {
 	Host string
 }
@@ -59,6 +72,17 @@ type getSysInfo struct {
 }
 
 type changeState struct {
+	System struct {
+		SetRelayState struct {
+			State int `json:"state"`
+		} `json:"set_relay_state"`
+	} `json:"system"`
+}
+
+type changeStateChild struct {
+	Context struct {
+		ChildIds []string `json:"child_ids"`
+	} `json:"context"`
 	System struct {
 		SetRelayState struct {
 			State int `json:"state"`
@@ -135,6 +159,14 @@ func send(host string, dataSend []byte) ([]byte, error) {
 	return response, nil
 }
 
+func getDevID(s *Tplink) (string, error) {
+	info, err := s.SystemInfo()
+	if err != nil {
+		return "", err
+	}
+	return info.System.GetSysinfo.DeviceID, nil
+}
+
 // SystemInfo Returns information from targeted device
 func (s *Tplink) SystemInfo() (SysInfo, error) {
 	var (
@@ -174,6 +206,46 @@ func (s *Tplink) TurnOn() error {
 func (s *Tplink) TurnOff() error {
 	var payload changeState
 
+	payload.System.SetRelayState.State = 0
+
+	j, _ := json.Marshal(payload)
+	data := encrypt(string(j))
+	if _, err := send(s.Host, data); err != nil {
+		return err
+	}
+	return nil
+}
+
+// TurnOnChild Device state change to turn remote device on with multiple controls
+func (s *Tplink) TurnOnChild(id int) error {
+	var payload changeStateChild
+
+	devID, err := getDevID(s)
+	if err != nil {
+		return err
+	}
+
+	payload.Context.ChildIds[0] = devID + fmt.Sprintf("%02d", id)
+	payload.System.SetRelayState.State = 1
+
+	j, _ := json.Marshal(payload)
+	data := encrypt(string(j))
+	if _, err := send(s.Host, data); err != nil {
+		return err
+	}
+	return nil
+}
+
+// TurnOffChild Device state change to turn remote device off with multiple controls
+func (s *Tplink) TurnOffChild(id int) error {
+	var payload changeStateChild
+
+	devID, err := getDevID(s)
+	if err != nil {
+		return err
+	}
+
+	payload.Context.ChildIds[0] = devID + fmt.Sprintf("%02d", id)
 	payload.System.SetRelayState.State = 0
 
 	j, _ := json.Marshal(payload)
