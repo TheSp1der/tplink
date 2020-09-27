@@ -94,7 +94,7 @@ func encrypt(plaintext string) []byte {
 	n := len(plaintext)
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.BigEndian, uint32(n))
-	ciphertext := []byte(buf.Bytes())
+	ciphertext := buf.Bytes()
 
 	key := byte(0xAB)
 	payload := make([]byte, n)
@@ -116,7 +116,7 @@ func decrypt(ciphertext []byte) string {
 	var nextKey byte
 	for i := 0; i < n; i++ {
 		nextKey = ciphertext[i]
-		ciphertext[i] = ciphertext[i] ^ key
+		ciphertext[i] ^= key
 		key = nextKey
 	}
 	return string(ciphertext)
@@ -126,7 +126,7 @@ func send(host string, dataSend []byte) ([]byte, error) {
 	var header = make([]byte, 4)
 
 	// establish connection (two second timeout)
-	conn, err := net.DialTimeout("tcp", host+":9999", time.Duration(time.Second*2))
+	conn, err := net.DialTimeout("tcp", host+":9999", time.Second*2)
 	if err != nil {
 		return []byte(""), err
 	}
@@ -225,7 +225,7 @@ func (s *Tplink) TurnOnChild(id int) error {
 		return err
 	}
 
-	payload.Context.ChildIds[0] = devID + fmt.Sprintf("%02d", id)
+	payload.Context.ChildIds = append(payload.Context.ChildIds, devID+fmt.Sprintf("%02d", id))
 	payload.System.SetRelayState.State = 1
 
 	j, _ := json.Marshal(payload)
@@ -245,7 +245,7 @@ func (s *Tplink) TurnOffChild(id int) error {
 		return err
 	}
 
-	payload.Context.ChildIds[0] = devID + fmt.Sprintf("%02d", id)
+	payload.Context.ChildIds = append(payload.Context.ChildIds, devID+fmt.Sprintf("%02d", id))
 	payload.System.SetRelayState.State = 0
 
 	j, _ := json.Marshal(payload)
