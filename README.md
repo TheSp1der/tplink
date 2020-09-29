@@ -14,6 +14,7 @@ This is a support package for interacting and obtaining information from [tp-lin
 
 * HS105 - Smart Plug
 * HS200 - Smart Switch
+* KP200 - Smart Outlet
 
 ## Credit
 
@@ -38,6 +39,8 @@ import "github.com/TheSp1der/tplink"
 ```
 
 ### Interacting with the device
+
+#### SystemInfo
 
 To obtain some basic information from the device use the example code below. To return other objects please examine the SysInfo struct.
 
@@ -65,18 +68,51 @@ Name: Office Light
 Power: On
 ```
 
+#### Change power state
+
+##### HSXXX or single switch/outlet device
+
 To turn a device on or off:
 
 ``` go
 // turn on
-d := tplink.Tplink{Host: "light-office.tplink.example.com"}
-if err := d.TurnOn(); err != nil {
+d := tplink.Tplink{
+    Host: "light-office.tplink.example.com",
+}
+if err := d.ChangeState(1); err != nil {
 	log.Fatal(err)
 }
 
 // turn off
-d := tplink.Tplink{Host: "light-office.tplink.example.com"}
-if err := d.TurnOff(); err != nil {
+d := tplink.Tplink{
+    Host: "light-office.tplink.example.com",
+}
+if err := d.ChangeState(0); err != nil {
+	log.Fatal(err)
+}
+```
+
+##### KPXXX or multi switch/outlet device
+
+The SwitchID is typically number starting at 0 for the first outlet/switch on the hardware.
+The following code identifies the first outlet/switch on the device:
+
+``` go
+// turn on
+d := tplink.Tplink{
+    Host: "light-office.tplink.example.com",
+    SwitchID: 1,
+}
+if err := d.ChangeStateMultiSwitch(1); err != nil {
+	log.Fatal(err)
+}
+
+// turn off
+d := tplink.Tplink{
+    Host: "light-office.tplink.example.com",
+    SwitchID: 1,
+}
+if err := d.ChangeStateMultiSwitch(0); err != nil {
 	log.Fatal(err)
 }
 ```
