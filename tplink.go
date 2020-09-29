@@ -225,7 +225,7 @@ func (s *Tplink) ChangeState(state bool) error {
 // ChangeStateMultiSwitch changes the power state of a device on with multiple outlets/switches
 // True = on
 // False = off
-func (s *Tplink) TurnOnChild(state bool) error {
+func (s *Tplink) ChangeStateMultiSwitch(state bool) error {
 	var payload changeStateMultiSwitch
 
 	devID, err := getDevID(s)
