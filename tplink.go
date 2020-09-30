@@ -5,12 +5,17 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"time"
 
 	"encoding/binary"
 	"encoding/json"
 )
+
+// This is the key by which all bytes sent/received from tp-link hardware are
+// obfuscated.
+const hashKey byte = 0xAB
 
 // SysInfo A type used to return information from tplink devices
 type SysInfo struct {
@@ -61,7 +66,8 @@ type SysInfo struct {
 
 // Tplink Device host identification
 type Tplink struct {
-	Host string
+	Host     string
+	SwitchID int
 }
 
 type getSysInfo struct {
@@ -79,7 +85,7 @@ type changeState struct {
 	} `json:"system"`
 }
 
-type changeStateChild struct {
+type changeStateMultiSwitch struct {
 	Context struct {
 		ChildIds []string `json:"child_ids"`
 	} `json:"context"`
@@ -93,10 +99,12 @@ type changeStateChild struct {
 func encrypt(plaintext string) []byte {
 	n := len(plaintext)
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.BigEndian, uint32(n))
+	if err := binary.Write(buf, binary.BigEndian, uint32(n)); err != nil {
+		log.Printf("[WARNING] tplink.go: Unable to write to buffer %v\n", err)
+	}
 	ciphertext := buf.Bytes()
 
-	key := byte(0xAB)
+	key := hashKey
 	payload := make([]byte, n)
 	for i := 0; i < n; i++ {
 		payload[i] = plaintext[i] ^ key
@@ -112,7 +120,7 @@ func encrypt(plaintext string) []byte {
 
 func decrypt(ciphertext []byte) string {
 	n := len(ciphertext)
-	key := byte(0xAB)
+	key := hashKey
 	var nextKey byte
 	for i := 0; i < n; i++ {
 		nextKey = ciphertext[i]
@@ -126,25 +134,31 @@ func send(host string, dataSend []byte) ([]byte, error) {
 	var header = make([]byte, 4)
 
 	// establish connection (two second timeout)
-	conn, err := net.DialTimeout("tcp", host+":9999", time.Second*2)
+	conn, err := net.DialTimeout("tcp", host+":9999", time.Second*2) //nolint:gomnd
 	if err != nil {
-		return []byte(""), err
+		return []byte{}, err
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil { //nolint:govet
+			log.Fatalf("[ERROR] tplink.go: Unable to close connection: %v\n", err)
+		}
+	}()
 
 	// submit data to device
 	writer := bufio.NewWriter(conn)
 	_, err = writer.Write(dataSend)
 	if err != nil {
-		return []byte(""), err
+		return []byte{}, err
 	}
-	writer.Flush()
+	if err := writer.Flush(); err != nil { //nolint:govet
+		return []byte{}, err
+	}
 
 	// read response header to determine response size
-	headerReader := io.LimitReader(conn, int64(4))
+	headerReader := io.LimitReader(conn, int64(4)) //nolint:gomnd
 	_, err = headerReader.Read(header)
 	if err != nil {
-		return []byte(""), err
+		return []byte{}, err
 	}
 
 	// read response
@@ -153,7 +167,7 @@ func send(host string, dataSend []byte) ([]byte, error) {
 	var response = make([]byte, respSize)
 	_, err = respReader.Read(response)
 	if err != nil {
-		return []byte(""), err
+		return []byte{}, err
 	}
 
 	return response, nil
@@ -188,11 +202,17 @@ func (s *Tplink) SystemInfo() (SysInfo, error) {
 	return jsonResp, nil
 }
 
-// TurnOn Device state change to turn remote device on
-func (s *Tplink) TurnOn() error {
+// ChangeState changes the power state of a single port device
+// True = on
+// False = off
+func (s *Tplink) ChangeState(state bool) error {
 	var payload changeState
 
-	payload.System.SetRelayState.State = 1
+	if state {
+		payload.System.SetRelayState.State = 1
+	} else {
+		payload.System.SetRelayState.State = 0
+	}
 
 	j, _ := json.Marshal(payload)
 	data := encrypt(string(j))
@@ -202,51 +222,23 @@ func (s *Tplink) TurnOn() error {
 	return nil
 }
 
-// TurnOff Device state change to turn remote device off
-func (s *Tplink) TurnOff() error {
-	var payload changeState
-
-	payload.System.SetRelayState.State = 0
-
-	j, _ := json.Marshal(payload)
-	data := encrypt(string(j))
-	if _, err := send(s.Host, data); err != nil {
-		return err
-	}
-	return nil
-}
-
-// TurnOnChild Device state change to turn remote device on with multiple controls
-func (s *Tplink) TurnOnChild(id int) error {
-	var payload changeStateChild
+// ChangeStateMultiSwitch changes the power state of a device on with multiple outlets/switches
+// True = on
+// False = off
+func (s *Tplink) ChangeStateMultiSwitch(state bool) error {
+	var payload changeStateMultiSwitch
 
 	devID, err := getDevID(s)
 	if err != nil {
 		return err
 	}
 
-	payload.Context.ChildIds = append(payload.Context.ChildIds, devID+fmt.Sprintf("%02d", id))
-	payload.System.SetRelayState.State = 1
-
-	j, _ := json.Marshal(payload)
-	data := encrypt(string(j))
-	if _, err := send(s.Host, data); err != nil {
-		return err
+	payload.Context.ChildIds = append(payload.Context.ChildIds, devID+fmt.Sprintf("%02d", s.SwitchID))
+	if state {
+		payload.System.SetRelayState.State = 1
+	} else {
+		payload.System.SetRelayState.State = 0
 	}
-	return nil
-}
-
-// TurnOffChild Device state change to turn remote device off with multiple controls
-func (s *Tplink) TurnOffChild(id int) error {
-	var payload changeStateChild
-
-	devID, err := getDevID(s)
-	if err != nil {
-		return err
-	}
-
-	payload.Context.ChildIds = append(payload.Context.ChildIds, devID+fmt.Sprintf("%02d", id))
-	payload.System.SetRelayState.State = 0
 
 	j, _ := json.Marshal(payload)
 	data := encrypt(string(j))
