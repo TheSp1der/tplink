@@ -1,5 +1,9 @@
 package tplink
 
+// Credit to:
+// sausheong - https://github.com/sausheong/hs1xxplug
+// jaedle - https://github.com/jaedle/golang-tplink-hs100/blob/master/internal/connector/connector.go
+
 import (
 	"bufio"
 	"bytes"
@@ -62,6 +66,29 @@ type SysInfo struct {
 			Longitude float64 `json:"longitude"`
 		} `json:"get_sysinfo"`
 	} `json:"system"`
+	Emeter struct {
+		GetRealtime struct {
+			CurrentMa int `json:"current_ma"`
+			VoltageMv int `json:"voltage_mv"`
+			PowerMw   int `json:"power_mw"`
+			TotalWh   int `json:"total_wh"`
+			ErrCode   int `json:"err_code"`
+		} `json:"get_realtime"`
+		GetVgainIgain struct {
+			Vgain   int `json:"vgain"`
+			Igain   int `json:"igain"`
+			ErrCode int `json:"err_code"`
+		} `json:"get_vgain_igain"`
+		GetDaystat struct {
+			DayList []struct {
+				Year     int `json:"year"`
+				Month    int `json:"month"`
+				Day      int `json:"day"`
+				EnergyWh int `json:"energy_wh"`
+			} `json:"day_list"`
+			ErrCode int `json:"err_code"`
+		} `json:"get_daystat"`
+	} `json:"emeter"`
 }
 
 // Tplink Device host identification
@@ -94,6 +121,25 @@ type changeStateMultiSwitch struct {
 			State int `json:"state"`
 		} `json:"set_relay_state"`
 	} `json:"system"`
+}
+
+type meterInfo struct {
+	System struct {
+		GetSysinfo struct{} `json:"get_sysinfo"`
+	} `json:"system"`
+	Emeter struct {
+		GetRealtime   struct{} `json:"get_realtime"`
+		GetVgainIgain struct{} `json:"get_vgain_igain"`
+	} `json:"emeter"`
+}
+
+type dailyStats struct {
+	Emeter struct {
+		GetDaystat struct {
+			Month int `json:"month"`
+			Year  int `json:"year"`
+		} `json:"get_daystat"`
+	} `json:"emeter"`
 }
 
 func encrypt(plaintext string) []byte {
@@ -247,3 +293,49 @@ func (s *Tplink) ChangeStateMultiSwitch(state bool) error {
 	}
 	return nil
 }
+
+// GetMeterInfo gets the power stats from a device
+func (s *Tplink) GetMeterInto() (SysInfo, error) {
+	var (
+		payload  meterInfo
+		jsonResp SysInfo
+	)
+
+	j, _ := json.Marshal(payload)
+
+	data := encrypt(string(j))
+	resp, err := send(s.Host, data)
+	if err != nil {
+		return jsonResp, err
+	}
+
+	if err := json.Unmarshal([]byte(decrypt(resp)), &jsonResp); err != nil {
+		return jsonResp, err
+	}
+	return jsonResp, nil
+}
+
+// GetMeterInfo gets the power stats from a device
+func (s *Tplink) GetDailyStats(month, year int) (SysInfo, error) {
+	var (
+		payload dailyStats
+		jsonResp SysInfo
+	)
+
+	payload.Emeter.GetDaystat.Month = month
+	payload.Emeter.GetDaystat.Year = year
+
+	j, _ := json.Marshal(payload)
+
+	data := encrypt(string(j))
+	resp, err := send(s.Host, data)
+	if err != nil {
+		return jsonResp, err
+	}
+
+	if err := json.Unmarshal([]byte(decrypt(resp)), &jsonResp); err != nil {
+		return jsonResp, err
+	}
+	return jsonResp, nil
+}
+
