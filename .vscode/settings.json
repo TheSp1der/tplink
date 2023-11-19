@@ -1,0 +1,20 @@
+{
+	"go.useLanguageServer": true,
+	"go.vetOnSave": "package",
+	"go.lintOnSave": "package",
+	"go.formatTool": "goimports",
+	"go.lintTool": "golangci-lint",
+	"go.lintFlags": [
+		"--fast"
+	],
+
+	"[go]": {
+		"editor.detectIndentation": false,
+		"editor.tabSize": 2,
+		"editor.insertSpaces": false,
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.organizeImports": true
+		}
+	}
+}

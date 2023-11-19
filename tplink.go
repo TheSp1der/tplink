@@ -5,8 +5,6 @@ package tplink
 // jaedle - https://github.com/jaedle/golang-tplink-hs100/blob/master/internal/connector/connector.go
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +18,8 @@ import (
 // This is the key by which all bytes sent/received from tp-link hardware are
 // obfuscated.
 const hashKey byte = 0xAB
+const frameHeaderSize = 4
+const frameMaxSize = 1 << 30
 
 // SysInfo A type used to return information from tplink devices
 type SysInfo struct {
@@ -142,81 +142,82 @@ type dailyStats struct {
 	} `json:"emeter"`
 }
 
-func encrypt(plaintext string) []byte {
-	n := len(plaintext)
-	buf := new(bytes.Buffer)
-	if err := binary.Write(buf, binary.BigEndian, uint32(n)); err != nil {
-		log.Printf("[WARNING] tplink.go: Unable to write to buffer %v\n", err)
-	}
-	ciphertext := buf.Bytes()
+func encrypt(data []byte) []byte {
+	ciphertext := make([]byte, len(data))
 
 	key := hashKey
-	payload := make([]byte, n)
-	for i := 0; i < n; i++ {
-		payload[i] = plaintext[i] ^ key
-		key = payload[i]
-	}
-
-	for i := 0; i < len(payload); i++ {
-		ciphertext = append(ciphertext, payload[i])
+	for i, currentByte := range data {
+		encByte := key ^ currentByte
+		key = encByte
+		ciphertext[i] = encByte
 	}
 
 	return ciphertext
 }
 
-func decrypt(ciphertext []byte) string {
-	n := len(ciphertext)
+func decrypt(ciphertext []byte) []byte {
+	plaintext := make([]byte, len(ciphertext))
+
 	key := hashKey
-	var nextKey byte
-	for i := 0; i < n; i++ {
-		nextKey = ciphertext[i]
-		ciphertext[i] ^= key
-		key = nextKey
+	for i, currentByte := range ciphertext {
+		decByte := key ^ currentByte
+		key = currentByte
+		plaintext[i] = decByte
 	}
-	return string(ciphertext)
+
+	return plaintext
 }
 
-func send(host string, dataSend []byte) ([]byte, error) {
-	var header = make([]byte, 4)
-
+func talkToDevice(host string, payload []byte) ([]byte, error) {
 	// establish connection (two second timeout)
-	conn, err := net.DialTimeout("tcp", host+":9999", time.Second*2) //nolint:gomnd
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, 9999), time.Second*2)
 	if err != nil {
 		return []byte{}, err
 	}
 	defer func() {
-		if err := conn.Close(); err != nil { //nolint:govet
+		if err := conn.Close(); err != nil {
 			log.Fatalf("[ERROR] tplink.go: Unable to close connection: %v\n", err)
 		}
 	}()
 
-	// submit data to device
-	writer := bufio.NewWriter(conn)
-	_, err = writer.Write(dataSend)
-	if err != nil {
-		return []byte{}, err
-	}
-	if err := writer.Flush(); err != nil { //nolint:govet
-		return []byte{}, err
+	// encrypt payload
+	encryptedPayload := encrypt(payload)
+	frameData := func(data []byte) []byte {
+		frameSize := len(data)
+		frameBuffer := make([]byte, frameHeaderSize, frameSize+frameHeaderSize)
+		binary.BigEndian.PutUint32(frameBuffer, uint32(frameSize))
+		return append(frameBuffer, data...)
+	}(encryptedPayload)
+
+	// send payload
+	if _, err := conn.Write(frameData); err != nil {
+		return nil, fmt.Errorf("[ERROR] tplink.go: Unable to send payload: %v", err)
 	}
 
-	// read response header to determine response size
-	headerReader := io.LimitReader(conn, int64(4)) //nolint:gomnd
-	_, err = headerReader.Read(header)
+	// read payload
+	data, err := func(r io.Reader) ([]byte, error) {
+		header := make([]byte, frameHeaderSize)
+		if _, err := io.ReadFull(r, header); err != nil {
+			return nil, fmt.Errorf("[ERROR] tplink.go: Unable to read payload: %v", err)
+		}
+
+		frameSize := binary.BigEndian.Uint32(header)
+		if frameSize > frameMaxSize {
+			return nil, fmt.Errorf("[ERROR] tplink.go: Returned data exceeds max frame size: 1GB")
+		}
+
+		frameBuffer := make([]byte, frameSize)
+		_, err := io.ReadFull(r, frameBuffer)
+		if err != nil {
+			return nil, fmt.Errorf("[ERROR] tplink.go: Unable to read returned data: %v", err)
+		}
+		return frameBuffer, nil
+	}(conn)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 
-	// read response
-	respSize := int64(binary.BigEndian.Uint32(header))
-	respReader := io.LimitReader(conn, respSize)
-	var response = make([]byte, respSize)
-	_, err = respReader.Read(response)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	return response, nil
+	return decrypt(data), nil
 }
 
 func getDevID(s *Tplink) (string, error) {
@@ -234,15 +235,17 @@ func (s *Tplink) SystemInfo() (SysInfo, error) {
 		jsonResp SysInfo
 	)
 
-	j, _ := json.Marshal(payload)
+	j, err := json.Marshal(payload)
+	if err != nil {
+		return SysInfo{}, fmt.Errorf("[WARN] Unexpected data: %v", err)
+	}
 
-	data := encrypt(string(j))
-	resp, err := send(s.Host, data)
+	resp, err := talkToDevice(s.Host, j)
 	if err != nil {
 		return jsonResp, err
 	}
 
-	if err := json.Unmarshal([]byte(decrypt(resp)), &jsonResp); err != nil {
+	if err := json.Unmarshal(resp, &jsonResp); err != nil {
 		return jsonResp, err
 	}
 	return jsonResp, nil
@@ -260,9 +263,12 @@ func (s *Tplink) ChangeState(state bool) error {
 		payload.System.SetRelayState.State = 0
 	}
 
-	j, _ := json.Marshal(payload)
-	data := encrypt(string(j))
-	if _, err := send(s.Host, data); err != nil {
+	j, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("[WARN] Unexpected data: %v", err)
+	}
+
+	if _, err := talkToDevice(s.Host, j); err != nil {
 		return err
 	}
 	return nil
@@ -286,9 +292,11 @@ func (s *Tplink) ChangeStateMultiSwitch(state bool) error {
 		payload.System.SetRelayState.State = 0
 	}
 
-	j, _ := json.Marshal(payload)
-	data := encrypt(string(j))
-	if _, err := send(s.Host, data); err != nil {
+	j, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("[WARN] Unexpected data: %v", err)
+	}
+	if _, err := talkToDevice(s.Host, j); err != nil {
 		return err
 	}
 	return nil
@@ -301,15 +309,17 @@ func (s *Tplink) GetMeterInto() (SysInfo, error) {
 		jsonResp SysInfo
 	)
 
-	j, _ := json.Marshal(payload)
+	j, err := json.Marshal(payload)
+	if err != nil {
+		return SysInfo{}, fmt.Errorf("[WARN] Unexpected data: %v", err)
+	}
 
-	data := encrypt(string(j))
-	resp, err := send(s.Host, data)
+	resp, err := talkToDevice(s.Host, j)
 	if err != nil {
 		return jsonResp, err
 	}
 
-	if err := json.Unmarshal([]byte(decrypt(resp)), &jsonResp); err != nil {
+	if err := json.Unmarshal(resp, &jsonResp); err != nil {
 		return jsonResp, err
 	}
 	return jsonResp, nil
@@ -318,24 +328,25 @@ func (s *Tplink) GetMeterInto() (SysInfo, error) {
 // GetMeterInfo gets the power stats from a device
 func (s *Tplink) GetDailyStats(month, year int) (SysInfo, error) {
 	var (
-		payload dailyStats
+		payload  dailyStats
 		jsonResp SysInfo
 	)
 
 	payload.Emeter.GetDaystat.Month = month
 	payload.Emeter.GetDaystat.Year = year
 
-	j, _ := json.Marshal(payload)
+	j, err := json.Marshal(payload)
+	if err != nil {
+		return SysInfo{}, fmt.Errorf("[WARN] Unexpected data in response: %v", err)
+	}
 
-	data := encrypt(string(j))
-	resp, err := send(s.Host, data)
+	resp, err := talkToDevice(s.Host, j)
 	if err != nil {
 		return jsonResp, err
 	}
 
-	if err := json.Unmarshal([]byte(decrypt(resp)), &jsonResp); err != nil {
+	if err := json.Unmarshal(resp, &jsonResp); err != nil {
 		return jsonResp, err
 	}
 	return jsonResp, nil
 }
-

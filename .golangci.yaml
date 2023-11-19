@@ -1,0 +1,58 @@
+linters:
+  disable-all: true
+  enable:
+    # default linters
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # project linters
+    - asasalint
+    - asciicheck
+    - bodyclose
+    - contextcheck
+    - dupl
+    - durationcheck
+    - errchkjson
+    - gocheckcompilerdirectives
+    - gocognit
+    - goconst
+    - gocritic
+    - godox
+    - goimports
+    - gosec
+    - grouper
+    - importas
+    - misspell
+    - musttag
+    - nestif
+    - nilerr
+    - nilnil
+    - prealloc
+    - reassign
+    - tagalign
+    - tenv
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+  fast: true
+linter-settings:
+  tagalign:
+    order:
+      - json
+      - yaml
+      - yml
+      - toml
+      - mapstructure
+      - binding
+      - validate
+      - env
+      - default
+      - ignored
+      - required
+      - secret
+      - info
