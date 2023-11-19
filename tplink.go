@@ -1,8 +1,9 @@
 package tplink
 
 // Credit to:
-// sausheong - https://github.com/sausheong/hs1xxplug
-// jaedle - https://github.com/jaedle/golang-tplink-hs100/blob/master/internal/connector/connector.go
+// sausheong       https://github.com/sausheong/hs1xxplug
+// jaedle          https://github.com/jaedle/golang-tplink-hs100
+// nik-johnson-net https://github.com/nik-johnson-net/go-smarthome
 
 import (
 	"fmt"

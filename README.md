@@ -15,12 +15,14 @@ This is a support package for interacting and obtaining information from [tp-lin
 * HS105 - Smart Plug
 * HS200 - Smart Switch
 * KP200 - Smart Outlet
+* HS300 - Smart Power-strip
 
 ## Credit
 
 * [tp-link](//www.tp-link.com) - Without the products supplied by this company my home automation would rely on cloud based functions. (Yuck!)
 * [sausheong](//github.com/sausheong) - Sausheong's [hs1xxplug](//github.com/sausheong/hs1xxplug) was what the majority of this project was built from, but failed to fully support the HS105 at the time.
 * [jaedle](//github.com/jaedle) - The [connector](//github.com/jaedle/golang-tplink-hs100/blob/master/internal/connector/connector.go) written by jaedle was instrumental in helping me understand how [tp-link](//www.tp-link.com) devices communicated.
+* [go-smarthome](https://github.com/nik-johnson-net/go-smarthome/) - The go-smarthome library from [nik-johnson-net](https://github.com/nik-johnson-net) had a better implementation of the communication protocol for kasa devices and was adapted into this library to support the HS300.
 
 ## Usage 
 
