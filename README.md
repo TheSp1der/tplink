@@ -79,7 +79,7 @@ To turn a device on or off:
 d := tplink.Tplink{
     Host: "light-office.tplink.example.com",
 }
-if err := d.ChangeState(1); err != nil {
+if err := d.ChangeState(true); err != nil {
 	log.Fatal(err)
 }
 
@@ -87,7 +87,7 @@ if err := d.ChangeState(1); err != nil {
 d := tplink.Tplink{
     Host: "light-office.tplink.example.com",
 }
-if err := d.ChangeState(0); err != nil {
+if err := d.ChangeState(false); err != nil {
 	log.Fatal(err)
 }
 ```
@@ -103,7 +103,7 @@ d := tplink.Tplink{
     Host: "light-office.tplink.example.com",
     SwitchID: 1,
 }
-if err := d.ChangeStateMultiSwitch(1); err != nil {
+if err := d.ChangeStateMultiSwitch(true); err != nil {
 	log.Fatal(err)
 }
 
@@ -112,7 +112,7 @@ d := tplink.Tplink{
     Host: "light-office.tplink.example.com",
     SwitchID: 1,
 }
-if err := d.ChangeStateMultiSwitch(0); err != nil {
+if err := d.ChangeStateMultiSwitch(false); err != nil {
 	log.Fatal(err)
 }
 ```
